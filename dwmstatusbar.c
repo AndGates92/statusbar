@@ -23,6 +23,9 @@
 #define VOLUME_BOUND 100
 #define MAX_LINE_LENGTH 100
 
+#define RESOURCE_LENGTH 100
+#define UNIT_LENGTH 100
+
 static Display *dpy;
 
 int str_to_int (int k, char str[]){
@@ -39,7 +42,6 @@ int mpc_stat(char **mpc_vol, char **mpc_state, char **mpc_song){
 	FILE *file_mpc_state = NULL;
 
 	char line[MAX_LINE_LENGTH];
-//	char vol[3], state[5], song[100];
 	char song_num_char[4];
 	int i = 0;
 	int k = 0;
@@ -62,7 +64,6 @@ int mpc_stat(char **mpc_vol, char **mpc_state, char **mpc_song){
 			if(*(*mpc_vol+((int)strlen(*mpc_vol))-1) <= 32) {
 				*(*mpc_vol + (((int)strlen(*mpc_vol))-1)) = 0;
 			}
-//			printf("vol %s\nline %s\n", vol, line);
 		} else if (i == 2){
 			int j = 0;
 			while(line[j] != ':'){
@@ -72,7 +73,6 @@ int mpc_stat(char **mpc_vol, char **mpc_state, char **mpc_song){
 			if(*(*mpc_state+((int)strlen(*mpc_state))-1) <= 32) {
 				*(*mpc_state + (((int)strlen(*mpc_state))-1)) = 0;
 			}
-//			printf("status %s\nline %s\n", state, line);
 		} else if (i == 3){
 			int j = 0;
 			while(line[j] < '0' || line[j] > '9'){
@@ -84,13 +84,10 @@ int mpc_stat(char **mpc_vol, char **mpc_state, char **mpc_song){
 				j++;
 			}
 			song_num = str_to_int(k, song_num_char);
-//			printf("song num %d\nline %s\n", song_num, line);
 			song_num_found = true;
 		} else if (song_num_found && line[k-1] >= '0' && line[k-1] <= '9'){
 			if (song_num == str_to_int(k, line)){
-//				printf("song title %s\nline %s\n",song, line);
 				strcpy(*mpc_song, &line[k+1]);
-//				printf("str len %d\n last char %d\n", (int)strlen(*mpc_song),(int)(*(*mpc_song + ((int)strlen(*mpc_song))-1)));
 				if(*(*mpc_song+((int)strlen(*mpc_song))-1) <= 32) {
 					*(*mpc_song + (((int)strlen(*mpc_song))-1)) = 0;
 				}
@@ -100,6 +97,117 @@ int mpc_stat(char **mpc_vol, char **mpc_state, char **mpc_song){
 	}
 
 	fclose(file_mpc_state);
+
+	return 1;
+}
+
+int getcpuusage(float* cpu_avg_freq) {
+	FILE *file_cpu_usage = NULL;
+	char line[MAX_LINE_LENGTH];
+
+	char* resource1;
+	char* resource2;
+	char* colon;
+	float value;
+
+	float cpu_freq_sum;
+	int num_proc;
+
+	if((resource1 = malloc(sizeof(char)*RESOURCE_LENGTH)) == NULL) {
+		fprintf(stderr, "Cannot allocate memory for resource1.\n");
+		exit(1);
+	}
+	if((resource2 = malloc(sizeof(char)*RESOURCE_LENGTH)) == NULL) {
+		fprintf(stderr, "Cannot allocate memory for resource2.\n");
+		exit(1);
+	}
+	if((colon = malloc(sizeof(char)*RESOURCE_LENGTH)) == NULL) {
+		fprintf(stderr, "Cannot allocate memory for colon.\n");
+		exit(1);
+	}
+	file_cpu_usage = fopen("/proc/cpuinfo", "r");
+
+	if(file_cpu_usage == NULL){
+		fprintf(stderr, "Error opening /proc/cpuinfo");
+		return -1;
+	}
+
+	num_proc=0;
+	cpu_freq_sum=0;
+
+	while((fgets(line, MAX_LINE_LENGTH, file_cpu_usage)) != NULL){
+		sscanf(line, "%s %s %s %f", resource1, resource2, colon, &value);
+
+		if ((!(strcmp(resource1, "cpu"))) && (!(strcmp(resource2, "MHz")))) {
+			cpu_freq_sum+=value;
+			num_proc++;
+		}
+	}
+	printf("cpu tot %f no proc %d\n", cpu_freq_sum, num_proc); 
+
+	*cpu_avg_freq = ((float)cpu_freq_sum/(float)num_proc);
+
+	fclose(file_cpu_usage);
+
+	return 1;
+}
+
+int getmemoryusage(int* mem_available, int* mem_used) {
+	FILE *file_mem_usage = NULL;
+	char line[MAX_LINE_LENGTH];
+
+	char* resource;
+	long value;
+	char* unit;
+
+	char* found_char=NULL;
+	char  search_char=':';
+
+	size_t pos_char;
+
+	long mem_total_kb;
+	long mem_available_kb;
+
+	if((resource = malloc(sizeof(char)*RESOURCE_LENGTH)) == NULL) {
+		fprintf(stderr, "Cannot allocate memory for resource.\n");
+		exit(1);
+	}
+
+	if((unit = malloc(sizeof(char)*UNIT_LENGTH)) == NULL) {
+		fprintf(stderr, "Cannot allocate memory for unit.\n");
+		exit(1);
+	}
+
+	file_mem_usage = fopen("/proc/meminfo", "r");
+
+	if(file_mem_usage == NULL){
+		fprintf(stderr, "Error opening /proc/meminfo");
+		return -1;
+	}
+
+	mem_total_kb=0;
+	mem_available_kb=0;
+
+	while((fgets(line, MAX_LINE_LENGTH, file_mem_usage)) != NULL){
+		sscanf(line, "%s %ld %s", resource, &value, unit);
+
+		found_char = strchr(resource, search_char);
+		if(found_char != NULL) {
+			pos_char=found_char-resource;
+			resource[pos_char]='\0';
+		}
+
+		if (!(strcmp(resource, "MemTotal"))) {
+			mem_total_kb=value;
+		} else if (!(strcmp(resource, "MemAvailable"))) {
+			mem_available_kb=value;
+		}
+	}
+
+	*mem_available = ((float)mem_available_kb/(float)mem_total_kb)*100;
+	*mem_used = 100 - (*mem_available);
+
+	fclose(file_mem_usage);
 
 	return 1;
 }
@@ -123,7 +231,7 @@ int net(char **net_intf, char **ip)
 
 	ifr.ifr_addr.sa_family = AF_INET;
 
-	char* intf_scan[2] = {"eth0", "wlan0"};
+	char* intf_scan[2] = {"eno2", "wlo1"};
 
 
 	for(i=0; i < 2; i++){
@@ -131,7 +239,7 @@ int net(char **net_intf, char **ip)
 		sprintf(full_search_path, "%s/%s/link_mode", file_path, intf_scan[i]);
 		file_intf_up = fopen(full_search_path, "r");
 		if (file_intf_up == NULL){
-			fprintf(stderr, "Error opening link_mode for interface %s", intf_scan[i]);
+			fprintf(stderr, "Error opening link_mode for interface %s\n", intf_scan[i]);
 			return -1;
 		}
 		fscanf(file_intf_up, "%d", &intf_sel);
@@ -140,7 +248,7 @@ int net(char **net_intf, char **ip)
 		sprintf(full_search_path, "%s/%s/operstate", file_path, intf_scan[i]);
 		file_intf_up = fopen(full_search_path, "r");
 		if (file_intf_up == NULL){
-			fprintf(stderr, "Error opening operstate for interface %s", intf_scan[i]);
+			fprintf(stderr, "Error opening operstate for interface %s\n", intf_scan[i]);
 			return -1;
 		}
 		fscanf(file_intf_up, "%s", intf_state);
@@ -291,7 +399,7 @@ int getbattery(int* en_now, int* en_full) {
 	FILE *fd;
 	int energy_now, energy_full, voltage_now;
 
-	fd = fopen("/sys/class/power_supply/BAT0/energy_now", "r");
+	fd = fopen("/sys/class/power_supply/BAT0/charge_now", "r");
 	if(fd == NULL) {
 		fprintf(stderr, "Error opening energy_now.\n");
 		return -1;
@@ -300,7 +408,7 @@ int getbattery(int* en_now, int* en_full) {
 	fclose(fd);
 
 
-	fd = fopen("/sys/class/power_supply/BAT0/energy_full", "r");
+	fd = fopen("/sys/class/power_supply/BAT0/charge_full", "r");
 	if(fd == NULL) {
 		fprintf(stderr, "Error opening energy_full.\n");
 		return -1;
@@ -326,8 +434,6 @@ int getbattery(int* en_now, int* en_full) {
 long time_usec(struct timeval *curr_time){
 	gettimeofday(curr_time, NULL);
 
-//	printf("\nsec.usec: %ld.%06ld\n", curr_time->tv_sec, curr_time->tv_usec);
-
 	return (long)1e6*(curr_time->tv_sec)+(curr_time->tv_usec);
 }
 
@@ -339,7 +445,7 @@ int main(void) {
 	}
 
 	char *datetime = NULL;
-	char state_bat[11];
+	char state_bat[12];
 	int bat1, energy_full; // bat2;
 
 	int rem_hours = 0, rem_min = 0, rem_sec = 0;
@@ -361,6 +467,11 @@ int main(void) {
 
 	long left_volume;
 	long right_volume;
+
+	int mem_used;
+	int mem_available;
+
+	float cpu_avg_freq;
 
 	long usec1, usec2 = 0;
 	struct timeval time1, time2;
@@ -404,10 +515,13 @@ int main(void) {
 		datetime = getdatetime();
 		getvolume(&left_volume, &right_volume);
 
+		getmemoryusage(&mem_available, &mem_used);
+		getcpuusage(&cpu_avg_freq);
+
 		if (connected == 1) sprintf(net_displ, "%s: %s", net_intf, ip);
 		else sprintf(net_displ, "not connected");
 
-		mpc_stat(&mpc_vol, &mpc_state, &mpc_song);
+		//mpc_stat(&mpc_vol, &mpc_state, &mpc_song);
 
 		if (count == 0) {
 			usec1 = time_usec(&time1);
@@ -434,21 +548,21 @@ int main(void) {
 				strcpy(state_bat, "unknown");
 			}
 
-//			fprintf(stdout, "bat1 %d and bat2 %d rem_usec %ld", energy1, energy2, rem_usec);
-
 			rem_hours = (int)(rem_usec/(1e6*60*60));
 			rem_min = (int)((rem_usec/(1e6*60)) - rem_hours*60);
 			rem_sec = (int)((rem_usec/(1e6)) - rem_hours*60*60 - rem_min*60);
 
-//			fprintf(stdout, "bat1 %d and bat2 %d and bat full %d rem_usec %ld usec1 %ld usec2 %ld diff %ld rem charge %d\n", energy1, energy2, energy_full, rem_usec, usec1, usec2, usec2-usec1, (int)(((float)(energy2+energy1)/(2*(float)energy_full))));
+
+			if ((bat1 < 15) && (strcmp(state_bat, "discharging") == 0)) {
+				system("mplayer /home/andrea/.local/statusbar/sound/siren.mp3");
+			}
 
 		} else {
 			count++;
 		}
 
-//	printf("MPC stat:\nvol: %s\nstate: %s\nsong %s\n", mpc_vol, mpc_state, mpc_song);
-
-		snprintf(status, STATUS_LENGTH,  "MPC: status: %s - song: %s | %s | volume left %i - right %i | Battery %d%% (%s %d h %d min %d s) | %s", mpc_state, mpc_song, net_displ, (int)left_volume, (int)right_volume, bat1, state_bat, rem_hours, rem_min, rem_sec, datetime);
+//		snprintf(status, STATUS_LENGTH,  "MPC: status: %s - song: %s | %s | volume left %i - right %i | Battery %d%% (%s %d h %d min %d s) | %s", mpc_state, mpc_song, net_displ, (int)left_volume, (int)right_volume, bat1, state_bat, rem_hours, rem_min, rem_sec, datetime);
+		snprintf(status, STATUS_LENGTH,  "CPU (avg) %4.3f MHz | RAM used %d%% available %d%% | %s | volume left %i - right %i | Battery %d%% (%s %d h %d min %d s) | %s", cpu_avg_freq, mem_used, mem_available, net_displ, (int)left_volume, (int)right_volume, bat1, state_bat, rem_hours, rem_min, rem_sec, datetime);
 
 		setstatus(status);
 	}
