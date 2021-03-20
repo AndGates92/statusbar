@@ -143,7 +143,6 @@ int getcpuusage(float* cpu_avg_freq) {
 			num_proc++;
 		}
 	}
-	printf("cpu tot %f no proc %d\n", cpu_freq_sum, num_proc); 
 
 	*cpu_avg_freq = ((float)cpu_freq_sum/(float)num_proc);
 
@@ -437,6 +436,40 @@ long time_usec(struct timeval *curr_time){
 	return (long)1e6*(curr_time->tv_sec)+(curr_time->tv_usec);
 }
 
+int getbrightness(float *brightness) {
+	const char * backlight_dir = "/sys/class/backlight/intel_backlight";
+	const char * cur_brightness_file = "brightness";
+	const char * max_brightness_file = "max_brightness";
+
+	int cur_brightness = 0;
+	int max_brightness = 0;
+
+	FILE *file_brightness = NULL;
+	char filepath[100];
+
+	sprintf(filepath, "%s/%s", backlight_dir, cur_brightness_file);
+	file_brightness = fopen(filepath, "r");
+	if (file_brightness == NULL){
+		fprintf(stderr, "Error opening current brightness file %s\n", filepath);
+		return -1;
+	}
+	fscanf(file_brightness, "%d", &cur_brightness);
+	fclose(file_brightness);
+
+	sprintf(filepath, "%s/%s", backlight_dir, max_brightness_file);
+	file_brightness = fopen(filepath, "r");
+	if (file_brightness == NULL){
+		fprintf(stderr, "Error opening maximum brightness file %s\n", filepath);
+		return -1;
+	}
+	fscanf(file_brightness, "%d", &max_brightness);
+	fclose(file_brightness);
+
+	*brightness = ((float)cur_brightness/(float)max_brightness)*100.0;
+
+	return 0;
+}
+
 int main(void) {
 	char *status;
 	if((status = malloc(STATUS_LENGTH*sizeof(char))) == NULL){
@@ -447,6 +480,7 @@ int main(void) {
 	char *datetime = NULL;
 	char state_bat[12];
 	int bat1, energy_full; // bat2;
+	float brightness = 0;
 
 	int rem_hours = 0, rem_min = 0, rem_sec = 0;
 	long rem_usec = 0;
@@ -470,7 +504,6 @@ int main(void) {
 
 	int mem_used;
 	int mem_available;
-
 	float cpu_avg_freq;
 
 	long usec1, usec2 = 0;
@@ -509,6 +542,7 @@ int main(void) {
 	for (;;sleep(1)) {
 
 		bat1 = getbattery(&dummy, &energy_full);
+		getbrightness(&brightness);
 
 		connected = net(&net_intf, &ip);
 
@@ -529,6 +563,7 @@ int main(void) {
 			count++;
 		} else if (count >= 5) {
 
+			// Estimation of the charging or dischargin time as well as the time left for the battery to be charged or discharged
 			count = 0;
 
 			usec2 = time_usec(&time2);
@@ -562,9 +597,9 @@ int main(void) {
 		}
 
 //		snprintf(status, STATUS_LENGTH,  "MPC: status: %s - song: %s | %s | volume left %i - right %i | Battery %d%% (%s %d h %d min %d s) | %s", mpc_state, mpc_song, net_displ, (int)left_volume, (int)right_volume, bat1, state_bat, rem_hours, rem_min, rem_sec, datetime);
-		snprintf(status, STATUS_LENGTH,  "CPU (avg) %4.3f MHz | RAM used %d%% available %d%% | %s | volume left %i - right %i | Battery %d%% (%s %d h %d min %d s) | %s", cpu_avg_freq, mem_used, mem_available, net_displ, (int)left_volume, (int)right_volume, bat1, state_bat, rem_hours, rem_min, rem_sec, datetime);
-
+		snprintf(status, STATUS_LENGTH,  " brightness %2.2f%% | CPU (avg) %4.3f MHz | RAM used %d%% available %d%% | %s | volume left %i - right %i | Battery %d%% (%s %d h %d min %d s) | %s", brightness, cpu_avg_freq, mem_used, mem_available, net_displ, (int)left_volume, (int)right_volume, bat1, state_bat, rem_hours, rem_min, rem_sec, datetime);
 		setstatus(status);
+
 	}
 
 	free(mpc_song);

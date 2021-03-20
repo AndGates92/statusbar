@@ -1,6 +1,6 @@
 CSRC=dwmstatusbar.c
 TARGET=dwmstatusbar
-DSTDIR=${HOME}/.local/bin/
+DSTDIR=${HOME}/.local/bin
 ALSA_FLAGS=-lasound
 X11_FLAGS=-lX11
 GCC_FLAGS=-lm -Wall
