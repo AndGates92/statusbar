@@ -516,6 +516,7 @@ int main(void) {
 	int count = 0;
 
 	char *mpc_vol, *mpc_state, *mpc_song = NULL;
+	char *wrn_tone_filename = NULL;
 
 	if((mpc_vol = malloc(3*sizeof(char))) == NULL){
 		printf("Cannot allocate memory for mpc_vol");
@@ -530,6 +531,22 @@ int main(void) {
 	if((mpc_song = malloc(100*sizeof(char))) == NULL){
 		printf("Cannot allocate memory for mpc_song");
 		return 0;
+	}
+
+	if((wrn_tone_filename = malloc(100*sizeof(char))) == NULL){
+		printf("Cannot allocate memory for wrn_tone_filename");
+		return 0;
+	}
+	strcpy(wrn_tone_filename, "/home/andrea/.local/statusbar/sound/siren.mp3");
+
+	FILE *wrn_tone = fopen(wrn_tone_filename, "r");
+	char wrn_tone_cmd[200];
+	if(wrn_tone == NULL){
+		fprintf(stderr, "Error opening warning tone file %s\n", wrn_tone_filename);
+		wrn_tone_cmd[0] = '\0';
+	} else {
+		fclose(wrn_tone);
+		sprintf(wrn_tone_cmd, "mplayer %s", wrn_tone_filename);
 	}
 
 	if (!(dpy = XOpenDisplay(NULL))) {
@@ -588,8 +605,8 @@ int main(void) {
 			rem_sec = (int)((rem_usec/(1e6)) - rem_hours*60*60 - rem_min*60);
 
 
-			if ((bat1 < 15) && (strcmp(state_bat, "discharging") == 0)) {
-				system("mplayer /home/andrea/.local/statusbar/sound/siren.mp3");
+			if ((bat1 < 15) && (strcmp(state_bat, "discharging") == 0) && (wrn_tone_cmd[0] != '\0')) {
+				system(wrn_tone_cmd);
 			}
 
 		} else {
@@ -607,6 +624,7 @@ int main(void) {
 	free(mpc_vol);
 	free(net_intf);
 	free(ip);
+	free(wrn_tone_filename);
 	free(datetime);
 	free(status);
 	XCloseDisplay(dpy);

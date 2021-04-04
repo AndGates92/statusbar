@@ -14,4 +14,4 @@ move: compile
 clean:
 	rm -rf ${TARGET} ${DSTDIR}/${TARGET}
 
-all: clean move compile
+all: clean compile move
